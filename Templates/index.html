@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JIVC Jira Task</title>
+    <link rel="icon" type="image/png" sizes="32x32" href="/static/logo_keyloop.png">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .fixed-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            z-index: 1000;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center bg-gray-900">
+    <header class="fixed-header bg-gray-800 text-white py-4 w-full flex items-center justify-center px-6">
+        <div class="flex items-center">
+            <img src="/static/logo_keyloop.png" alt="IVC Team Logo" class="h-12">
+            <h1 class="text-xl font-bold ml-4">IVC TEAM</h1>
+        </div>
+    </header>
+    <div class="bg-gray-800 text-white p-6 rounded-lg shadow-lg w-96 mt-20">
+        <h2 class="text-lg font-semibold mb-4 text-center">JIRA AUTOMATION</h2>
+        <label class="block mb-2">Select Method</label>
+        <select id="methodSelect" class="w-full px-3 py-2 mb-4 rounded bg-gray-700 text-white border border-gray-600">
+            <option value="version">Using Version</option>
+            <option value="dates">Using From and To Dates</option>
+        </select>
+        <form id="versionForm">
+            <label class="block mb-2">Version</label>
+            <input type="text" id="version" required placeholder="Enter Versions, separated by commas Ex:1.145,1.155..."
+                class="w-full px-3 py-2 mb-4 rounded bg-gray-700 text-white border border-gray-600">
+            <label class="block mb-2">Client Emails (Comma Separated)</label>
+            <input type="text" id="clientMail" required placeholder="Enter emails, separated by commas"
+                class="w-full px-3 py-2 mb-2 rounded bg-gray-700 text-white border border-gray-600">
+            <p id="clientMailError" class="text-red-500 text-sm hidden">Invalid email format detected.</p>
+            <button type="submit" class="w-full bg-blue-500 py-2 rounded text-white hover:bg-blue-600">Submit</button>
+        </form>
+        <form id="datesForm" class="hidden">
+            <label class="block mb-2">From Date (YYYY-MM-DD)</label>
+            <input type="date" id="fromDate" required
+                class="w-full px-3 py-2 mb-4 rounded bg-gray-700 text-white border border-gray-600">
+            <label class="block mb-2">To Date (YYYY-MM-DD)</label>
+            <input type="date" id="toDate" required
+                class="w-full px-3 py-2 mb-4 rounded bg-gray-700 text-white border border-gray-600">
+            <label class="block mb-2">Client Emails (Comma Separated)</label>
+            <input type="text" id="dateEmail" required placeholder="Enter emails, separated by commas"
+                class="w-full px-3 py-2 mb-2 rounded bg-gray-700 text-white border border-gray-600">
+            <p id="emailError" class="text-red-500 text-sm hidden">Invalid email format detected.</p>
+            <p id="dateError" class="text-red-500 text-sm hidden">To date must be after From date.</p>
+            <button type="submit" class="w-full bg-blue-500 py-2 rounded text-white hover:bg-blue-600">Submit</button>
+        </form>
+        <p id="statusMessage" class="mt-4 text-center"></p>
+    </div>
+    <script>
+        document.getElementById("methodSelect").addEventListener("change", function() {
+            const selectedMethod = this.value;
+            document.getElementById("versionForm").classList.toggle("hidden", selectedMethod !== "version");
+            document.getElementById("datesForm").classList.toggle("hidden", selectedMethod !== "dates");
+        });
+
+        function validateEmails(emailInput, errorElement) {
+            const emails = emailInput.split(",").map(email => email.trim());
+            const emailPattern = /^[^\s@]+@keyloop\.com$/;
+            const isValid = emails.every(email => emailPattern.test(email));
+            document.getElementById(errorElement).classList.toggle("hidden", isValid);
+            return isValid ? emails.join(",") : false;
+        }
+
+        async function triggerJenkinsJob(payload) {
+            try {
+                const response = await fetch("/trigger-jenkins", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                document.getElementById("statusMessage").textContent = result.message || result.error;
+            } catch (error) {
+                document.getElementById("statusMessage").textContent = "⚠️ Error: " + error.message;
+            }
+        }
+        document.getElementById("versionForm").addEventListener("submit", async function(event) {
+    event.preventDefault();
+
+    const versionInput = document.getElementById("version").value.trim();
+    const clientMail = document.getElementById("clientMail").value;
+    const validatedEmails = validateEmails(clientMail, "clientMailError");
+
+    // Version validation: Each version must be in "X.YYY" format
+    const versionPattern = /^[0-9]\.[0-9]{3}$/;
+    const versions = versionInput.split(",").map(v => v.trim()); // Split and trim each version
+    const allValid = versions.every(v => versionPattern.test(v));
+
+    if (!allValid) {
+        document.getElementById("statusMessage").textContent = "⚠️ Invalid version format! Use 'X.YYY' (e.g., 1.234, 2.678)";
+        return;
+    }
+
+    if (!validatedEmails) return;
+
+    triggerJenkinsJob({ version: versions.join(","), clientMail: validatedEmails });
+});
+
+
+
+        document.getElementById("datesForm").addEventListener("submit", async function(event) {
+            event.preventDefault();
+            const fromDate = document.getElementById("fromDate").value;
+            const toDate = document.getElementById("toDate").value;
+            const clientMail = document.getElementById("dateEmail").value;
+            if (new Date(fromDate) >= new Date(toDate)) {
+                document.getElementById("dateError").classList.remove("hidden");
+                return;
+            }
+            document.getElementById("dateError").classList.add("hidden");
+            const validatedEmails = validateEmails(clientMail, "emailError");
+            if (!validatedEmails) return;
+            triggerJenkinsJob({ fromDate, toDate, clientMail: validatedEmails });
+        });
+    </script>
+</body>
+</html>
